@@ -1,0 +1,15 @@
+/*
+   Project Intelligent Agent: Painter
+*/
+
+MAS painter {
+
+    infrastructure: Centralised
+
+    environment: PainterEnv
+
+    agents:
+        my_painter painter;
+
+    aslSourcePath: "src/agt";
+}
