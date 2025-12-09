@@ -54,7 +54,7 @@ public class PainterEnv extends Environment {
 
         double step_cost = -0.1; // cost for simple moving
         step_cost += inventory.size() * -0.02; // cost for carrying items
-        // incompatible items for the goal are not counted yet
+        // incompatible items for the goal are not counted yet and this is wrong
 
         if (action.getFunctor().equals("move_up")) {
             score += step_cost;
@@ -108,7 +108,7 @@ public class PainterEnv extends Environment {
             }
             else {
                 result = false;
-                System.out.println("Nothing to grab at current location.");
+                System.out.println("Nothing to grab at current location."); 
             }
             }
       
