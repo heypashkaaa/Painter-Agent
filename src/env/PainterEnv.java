@@ -30,7 +30,7 @@ public class PainterEnv extends Environment {
     int door_state = 0; // 0 - closed, 1 - opened
     int chair_state = 0; // 0 - unpainted, 1 - painted
     int table_state = 0; // 0 - unpainted, 1 - painted
-    double score = 0; // Agent's score
+    double score = 0.0; // Agent's score
 
     @Override
     //Initializing the environment
@@ -51,25 +51,26 @@ public class PainterEnv extends Environment {
     // Actions executing block
     public boolean executeAction(String agName, Structure action) {
         boolean result = false;
+        double step_cost = 0.0;
 
-        double step_cost = -0.1; // cost for simple moving
-        step_cost += inventory.size() * -0.02; // cost for carrying items
-        // incompatible items for the goal are not counted yet and this is wrong
+        if (inventory.isEmpty()) {
+            step_cost = -0.01; // cost for simple moving
+        } else {
+            step_cost = inventory.size() * -0.02;// cost for carrying items
+        }
+         
+        // incompatible items for the goal are not counted yet
 
         if (action.getFunctor().equals("move_up")) {
-            score += step_cost;
             result = model.move("up"); 
         } 
         else if (action.getFunctor().equals("move_down")) {
-            score += step_cost;
             result = model.move("down"); 
         } 
         else if (action.getFunctor().equals("move_left")) {
-            score += step_cost;
             result = model.move("left"); 
         } 
         else if (action.getFunctor().equals("move_right")) {
-            score += step_cost;
             result = model.move("right"); 
         } 
         else if (action.getFunctor().equals("grab")) {
@@ -192,7 +193,16 @@ public class PainterEnv extends Environment {
     
         // Updating percepts if action was successful (any change of the env)
         if (result) {
+           // Only deduct the cost if the action actually happened
+            score += step_cost;
+            
+            // Print for debugging
+            System.out.println("Action: " + action + " | Cost: " + step_cost + " | Total Score: " + String.format("%.3f", score));
+            
             updatePercepts();
+            try { Thread.sleep(500); } catch (Exception e) {} 
+        
+
         }
         return result;
     }
@@ -203,7 +213,7 @@ public class PainterEnv extends Environment {
     
         // new coords
         Location l = model.getAgPos(0);
-        addPercept(Literal.parseLiteral("pos(" + (l.x) + "," + (l.y) + ")"));
+        addPercept(Literal.parseLiteral("at(" + (l.x) + "," + (l.y) + ")"));
     
         // adding the beliefs about objects location
         for (int i = 0; i < GSize; i++) {
@@ -229,12 +239,7 @@ public class PainterEnv extends Environment {
             addPercept(Literal.parseLiteral("carrying(" + item + ")"));
         }
 
-        // dropping the objects
-        if (inventory.size() < MAX_CAPACITY){
-            for (String item : new String[]{"key", "code", "color", "brush"}) {
-                if (!inventory.contains(item)){
-                    removePercept(Literal.parseLiteral("carrying(" + item + ")"));}}
-        }
+        
 
         // door state
         if (door_state == 1) {
@@ -256,6 +261,11 @@ public class PainterEnv extends Environment {
         } else {
             addPercept(Literal.parseLiteral("table(unpainted)"));
         }
+
+        // current score percept (double value)
+        addPercept(Literal.parseLiteral("score(" + score + ")"));
+
+        
 
     }
 
@@ -324,6 +334,8 @@ public class PainterEnv extends Environment {
             g.fillRect(rx, ry, cellSizeW, cellSizeH);
             g.setColor(Color.LIGHT_GRAY);
             g.drawRect(rx, ry, cellSizeW, cellSizeH);
+
+           
 
             if ((object & PainterEnv.OBSTACLE) != 0) {
                 g.setColor(Color.BLACK);
