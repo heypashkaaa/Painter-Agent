@@ -15,8 +15,8 @@ public class PainterEnv extends Environment {
     private PainterView  view;
     public static final int GSize = 5; // Grid size
     public static final int EMPTY = 0;
-    public static final int AGENT  = 1;
-    public static final int OBSTACLE = 8;
+    public static final int AGENT  = 2;
+    public static final int OBSTACLE = 4;
     public static final int BRUSH  = 16;
     public static final int KEY    = 32;
     public static final int DOOR   = 64;
@@ -52,25 +52,22 @@ public class PainterEnv extends Environment {
     public boolean executeAction(String agName, Structure action) {
         boolean result = false;
         double step_cost = 0.0;
-
-        if (inventory.isEmpty()) {
-            step_cost = -0.01; // cost for simple moving
-        } else {
-            step_cost = inventory.size() * -0.02;// cost for carrying items
-        }
-         
-        // incompatible items for the goal are not counted yet
+        boolean isMovementAction = false;
 
         if (action.getFunctor().equals("move_up")) {
+            isMovementAction = true;
             result = model.move("up"); 
         } 
         else if (action.getFunctor().equals("move_down")) {
+            isMovementAction = true;
             result = model.move("down"); 
         } 
         else if (action.getFunctor().equals("move_left")) {
+            isMovementAction = true;
             result = model.move("left"); 
         } 
         else if (action.getFunctor().equals("move_right")) {
+            isMovementAction = true;
             result = model.move("right"); 
         } 
         else if (action.getFunctor().equals("grab")) {
@@ -189,12 +186,32 @@ public class PainterEnv extends Environment {
       
         }
 
-        // Points 
-    
+        // Points calculation
         // Updating percepts if action was successful (any change of the env)
         if (result) {
-           // Only deduct the cost if the action actually happened
-            score += step_cost;
+            // Only apply movement cost if this is a movement action
+            if (isMovementAction) {
+                if (inventory.isEmpty()) {
+                    step_cost = -0.01; // cost for moving with empty hands
+                } else {
+                    step_cost = inventory.size() * -0.02; // cost for moving with items
+                    
+                    // Extra penalty: count each unnecessary item separately
+                    // If both table and chair are painted, color and brush are unneeded
+                    if (chair_state == 1 && table_state == 1) {
+                        if (inventory.contains("color")) step_cost -= 0.01;
+                        if (inventory.contains("brush")) step_cost -= 0.01;
+                    }
+                    
+                    // If door is opened, code and key are unneeded
+                    if (door_state == 1) {
+                        if (inventory.contains("code")) step_cost -= 0.01;
+                        if (inventory.contains("key")) step_cost -= 0.01;
+                    }
+                }
+                score += step_cost;
+            }
+            // grab, drop, paint, open actions don't have a cost
             
             // Print for debugging
             System.out.println("Action: " + action + " | Cost: " + step_cost + " | Total Score: " + String.format("%.3f", score));
@@ -207,6 +224,7 @@ public class PainterEnv extends Environment {
         return result;
     }
 
+    
     
     void updatePercepts() {
         clearPercepts(); 
@@ -300,10 +318,12 @@ public class PainterEnv extends Environment {
             int y = l.y;
             
            
-            if (direction.equals("up")) y--;
-            if (direction.equals("down")) y++;
-            if (direction.equals("right")) x++;
-            if (direction.equals("left")) x--;
+            if (direction.equals("up") && y > 0) y--;
+            else if (direction.equals("down") && y < (GSize - 1)) y++;
+            else if (direction.equals("right") && x < (GSize - 1)) x++;
+            else if (direction.equals("left") && x > 0) x--;
+            else return false;
+
 
             if (isFree(OBSTACLE, x, y) && inGrid(x, y)) {
                 setAgPos(0, x, y); // Agent moves
@@ -339,7 +359,7 @@ public class PainterEnv extends Environment {
 
             if ((object & PainterEnv.OBSTACLE) != 0) {
                 g.setColor(Color.BLACK);
-                g.fillRect(rx + 1, ry + 1, cellSizeW - 2, cellSizeH - 2);
+                g.fillRect(rx, ry, cellSizeW - 2, cellSizeH - 2);
                 return; 
             }
 
