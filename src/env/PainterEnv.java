@@ -7,6 +7,77 @@ import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Font;
 import java.util.ArrayList;
+import java.util.*;
+
+
+class AStar {
+    static class Node implements Comparable<Node> {
+        int x, y, g, h;
+        Node parent;
+        
+        public Node(int x, int y, int g, int h, Node parent) {
+            this.x = x; this.y = y; this.g = g; this.h = h; this.parent = parent;
+        }
+        
+        int f() { return g + h; } // Total cost
+        
+        @Override
+        public int compareTo(Node o) { return Integer.compare(this.f(), o.f()); }
+        
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Node node = (Node) o;
+            return x == node.x && y == node.y;
+        }
+        
+        @Override
+        public int hashCode() { return Objects.hash(x, y); }
+    }
+
+    // Returns the NEXT immediate step (x, y) to take towards the target
+    public static Location findNextStep(PainterEnv.PainterModel model, Location start, Location target) {
+        PriorityQueue<Node> openList = new PriorityQueue<>();
+        Set<String> closedList = new HashSet<>();
+        
+        openList.add(new Node(start.x, start.y, 0, Math.abs(start.x - target.x) + Math.abs(start.y - target.y), null));
+        
+        while (!openList.isEmpty()) {
+            Node current = openList.poll();
+            
+            // If we reached the target, backtrack to find the first step
+            if (current.x == target.x && current.y == target.y) {
+                Node step = current;
+                while (step.parent != null && step.parent.parent != null) {
+                    step = step.parent;
+                }
+                return new Location(step.x, step.y);
+            }
+            
+            closedList.add(current.x + "," + current.y);
+            
+            // Check neighbors (Up, Down, Left, Right)
+            int[][] directions = {{0, 1}, {0, -1}, {1, 0}, {-1, 0}};
+            for (int[] dir : directions) {
+                int nx = current.x + dir[0];
+                int ny = current.y + dir[1];
+                
+                // Bounds check
+                if (nx < 0 || ny < 0 || nx >= PainterEnv.GSize || ny >= PainterEnv.GSize) continue;
+                
+                // Obstacle check (unless it's the target itself)
+                if (!model.isFree(PainterEnv.OBSTACLE, nx, ny)) continue;
+                if (closedList.contains(nx + "," + ny)) continue;
+                
+                int g = current.g + 1;
+                int h = Math.abs(nx - target.x) + Math.abs(ny - target.y);
+                openList.add(new Node(nx, ny, g, h, current));
+            }
+        }
+        return start; // No path found, stay put
+    }
+}
 
 // Dziedziczenie Environment Class from Jason framework
 public class PainterEnv extends Environment {
@@ -45,8 +116,6 @@ public class PainterEnv extends Environment {
         }
 
         
-
-
     @Override
     // Actions executing block
     public boolean executeAction(String agName, Structure action) {
@@ -54,22 +123,32 @@ public class PainterEnv extends Environment {
         double step_cost = 0.0;
         boolean isMovementAction = false;
 
-        if (action.getFunctor().equals("move_up")) {
+
+       if (action.getFunctor().equals("move_towards")) {
+        try {
+            int targetX = (int)((NumberTerm)action.getTerm(0)).solve();
+            int targetY = (int)((NumberTerm)action.getTerm(1)).solve();
+        
+            Location current = model.getAgPos(0);
+            Location target = new Location(targetX, targetY);
+        
+            // Use A* to find the next best step
+            Location nextStep = AStar.findNextStep((PainterModel)model, current, target);
+        
+            // Determine direction for the model.move() function
+            if (nextStep.x > current.x) result = model.move("right");
+            else if (nextStep.x < current.x) result = model.move("left");
+            else if (nextStep.y > current.y) result = model.move("down");
+            else if (nextStep.y < current.y) result = model.move("up");
+            else result = true; // Already there
+        
             isMovementAction = true;
-            result = model.move("up"); 
-        } 
-        else if (action.getFunctor().equals("move_down")) {
-            isMovementAction = true;
-            result = model.move("down"); 
-        } 
-        else if (action.getFunctor().equals("move_left")) {
-            isMovementAction = true;
-            result = model.move("left"); 
-        } 
-        else if (action.getFunctor().equals("move_right")) {
-            isMovementAction = true;
-            result = model.move("right"); 
-        } 
+        } catch (Exception e) {
+            System.out.println("Error in move_towards: " + e.getMessage());
+            result = false;
+        }
+        }
+
         else if (action.getFunctor().equals("grab")) {
             Location l = model.getAgPos(0);
             int cell = model.getCellData(l.x, l.y);
@@ -213,7 +292,6 @@ public class PainterEnv extends Environment {
             }
             // grab, drop, paint, open actions don't have a cost
             
-            // Print for debugging
             System.out.println("Action: " + action + " | Cost: " + step_cost + " | Total Score: " + String.format("%.3f", score));
             
             updatePercepts();
@@ -280,7 +358,7 @@ public class PainterEnv extends Environment {
             addPercept(Literal.parseLiteral("table(unpainted)"));
         }
 
-        // current score percept (double value)
+        // current score percept 
         addPercept(Literal.parseLiteral("score(" + score + ")"));
 
         

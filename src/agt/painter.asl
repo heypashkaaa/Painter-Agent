@@ -1,39 +1,134 @@
+// --- KNOWLEDGE BASE ---
+painting_tool(brush).
+painting_tool(color).
+opening_tool(key).
+opening_tool(code).
 
-// LOGICAL RULES 
-ready_to_paint :- carrying(brush) & carrying(color).
-ready_to_open  :- carrying(key) & carrying(code).
+has_painting_tools :- carrying(brush) & carrying(color).
+has_opening_tools  :- carrying(key) & carrying(code).
 
-
-//  GOAL
+// --- INITIAL GOAL ---
 !start.
-+!start <- .print("I am starting the task!");
-            !paint_table;
-            !paint_chair;
-            drop;drop;
-            !open_door;
-            ?score(S);
-            .print("I finished all the tasks! Here is my score: ", S).
 
-// PLANS FOR ACHIEVING SUBGOALS
++!start 
+    <- .print("--- I STARTED DOING THE TASKS ---");
+       // Priority 1: Higher Reward(Painting = +2.0)
+       !paint_all;
+       // Priority 2: Lower Reward(Door = +0.8)
+       !open_all;
+       ?score(S);
+       .print("--- ALL THE TASKS ARE FINISHED. FINAL SCORE: ", S).
 
-+!paint_table : ready_to_paint <- ?pos(table,X,Y); !goto(X,Y); paint.
-+!paint_table : not ready_to_paint <- !get(brush); !get(color); !paint_table.
+// --- PAINTING ---
 
-+!paint_chair : ready_to_paint <- ?pos(chair,X,Y); !goto(X,Y); paint.
-+!paint_chair : not ready_to_paint <- !get(brush); !get(color); !paint_chair.
+// If both are painted, ensure we drop tools to save points
++!paint_all 
+    : chair(painted) & table(painted) 
+    <- .print("Painting objectives complete.");
+       !drop_painting_tools. 
 
-+!open_door : ready_to_open <- ?pos(door,X,Y); !goto(X,Y); open.
-+!open_door : not ready_to_open <- !get(key); !get(code); !open_door.
+// Execution: If not done, get tools and do the job
++!paint_all 
+    <- .print("Objective: PAINTING");
+       !prepare_tools(painting); 
+       !paint_table;
+       !paint_chair;
+       !paint_all.
 
-// SMALLER TASKS 
+// --- OPENING ---
 
-+!get(Item) : carrying(Item) <- .print("I alreadY have it!").
-+!get(Item) : not carrying(Item) <- ?pos(Item, X,Y); !goto(X,Y); grab.
 
-+!goto(X,Y) : at(X,Y) <- .print("I'm alreadY here!").
--!goto(X,Y) <- .print("Cannot reach ", X, ",", Y); .fail.
++!open_all 
+    : door(opened) 
+    <- .print("Opening objectives complete.");
+       !drop_opening_tools. 
 
-+!goto(X,Y) : at(AgX,AgY) & AgX < X <- move_right; !goto(X,Y).
-+!goto(X,Y) : at(AgX,AgY) & AgX > X <- move_left; !goto(X,Y).
-+!goto(X,Y) : at(AgX,AgY) & AgY < Y <- move_down; !goto(X,Y).
-+!goto(X,Y) : at(AgX,AgY) & AgY > Y <- move_up; !goto(X,Y).
++!open_all 
+    <- .print("Objective: OPENING");
+       !prepare_tools(opening); 
+       !open_door;
+       !open_all.
+
+// --- PLANS ---
+
+// Table 
++!paint_table : table(painted) <- .print("Table is painted.").
++!paint_table : has_painting_tools
+    <- ?pos(table,X,Y); 
+       !goto(X,Y); 
+       paint; 
+       .print("Action: Painted the table.").
++!paint_table <- !prepare_tools(painting); !paint_table.
+
+// Chair 
++!paint_chair : chair(painted) <- .print("Chair is painted.").
++!paint_chair : has_painting_tools
+    <- ?pos(chair,X,Y); 
+       !goto(X,Y); 
+       paint; 
+       .print("Action: Painted the chair.").
++!paint_chair <- !prepare_tools(painting); !paint_chair.
+
+// Door 
++!open_door : door(opened) <- .print("Door is open.").
++!open_door : has_opening_tools
+    <- ?pos(door,X,Y); 
+       !goto(X,Y); 
+       open; 
+       .print("Action: Opened the door.").
++!open_door <- !prepare_tools(opening); !open_door.
+
+// --- BACKPACK MANAGEMENT ---
+
+// Fetching Logic
++!prepare_tools(painting) <- !ensure_has(brush); !ensure_has(color).
++!prepare_tools(opening)  <- !ensure_has(key); !ensure_has(code).
+
++!ensure_has(Item) : carrying(Item).
++!ensure_has(Item) : not carrying(Item)
+    <- .print("Need ", Item, ". Fetching...");
+       ?pos(Item, X, Y);
+       !goto(X,Y);
+       !try_grab(Item).
+
+// Grabbing with Error Handling
++!try_grab(Item) 
+    <- grab; 
+       .print("Success: Grabbed ", Item).
+-!try_grab(Item) // Failure recovery (Inventory Full)
+    <- .print("Inventory Full! Making space for ", Item);
+       !make_space_for(Item);
+       !try_grab(Item).
+
+// Drops items specifically to stop the -0.02/step penalty
+
++!drop_painting_tools
+    <- if (carrying(brush)) { drop(brush); .print("Dropped Brush (Cleanup)"); };
+       if (carrying(color)) { drop(color); .print("Dropped Color (Cleanup)"); }.
+
++!drop_opening_tools
+    <- if (carrying(key)) { drop(key); .print("Dropped Key (Cleanup)"); };
+       if (carrying(code)) { drop(code); .print("Dropped Code (Cleanup)"); }.
+
+// Emergency Drop (Inventory Full)
++!make_space_for(NeededItem)
+    : carrying(Useless) & Useless \== NeededItem
+    <- .print("Dropping ", Useless, " to make room.");
+       drop(Useless).
+
+// --- MOVEMENT LOGIC (Java A*) ---
+
+// Lucky Case: We are already there
++!goto(X,Y) : at(X,Y) 
+    <- .print("Arrived at destination (", X, ",", Y, ").").
+
+// Recursive walking: Move one step towards target
++!goto(X,Y) : not at(X,Y)
+    <- move_towards(X, Y); 
+       !goto(X,Y).         
+       
+// Failure 
+-!goto(X,Y) 
+    <- .print("Path blocked or target unreachable. Waiting...");
+       .wait(500);
+       !goto(X,Y).
