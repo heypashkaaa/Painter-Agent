@@ -11,13 +11,20 @@ has_opening_tools  :- carrying(key) & carrying(code).
 !start.
 
 +!start 
-    <- .print("--- I STARTED DOING THE TASKS ---");
+    : experiment_over 
+    <- .print("100 Episodes Complete.").
+
++!start : not experiment_over
+    <- .print("--- STARTING THE EPISODE ---");
        // Priority 1: Higher Reward(Painting = +2.0)
        !paint_all;
        // Priority 2: Lower Reward(Door = +0.8)
        !open_all;
        ?score(S);
-       .print("--- ALL THE TASKS ARE FINISHED. FINAL SCORE: ", S).
+       .print("--- ALL THE TASKS ARE FINISHED. FINAL SCORE: ", S);
+       next_episode;
+       .wait(score(0));
+       !start.
 
 // --- PAINTING ---
 
@@ -87,6 +94,7 @@ has_opening_tools  :- carrying(key) & carrying(code).
 +!ensure_has(Item) : carrying(Item).
 +!ensure_has(Item) : not carrying(Item)
     <- .print("Need ", Item, ". Fetching...");
+        .wait(pos(Item, _, _));
        ?pos(Item, X, Y);
        !goto(X,Y);
        !try_grab(Item).
